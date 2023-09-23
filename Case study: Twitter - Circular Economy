@@ -1,4 +1,7 @@
 Case Study: Twitter - Circular Economy
+
+Goals: Extracting topics, extracting relevant hashtags and keywords.
+
 Key Steps:
 1. Splitting the dataset into training and test sets (75% - 25%)
 2. Dataset cleaning
@@ -12,8 +15,6 @@ Key Steps:
 10. Topic identification
 11. Tweet classification based on topics
 12. Sentiment analysis relative to topics
-
-Goals: Extracting topics, extracting relevant hashtags and keywords.
 
 
 library(tm)
