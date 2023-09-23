@@ -1,0 +1,331 @@
+Case Study: Twitter - Circular Economy
+Key Steps:
+1. Splitting the dataset into training and test sets (75% - 25%)
+2. Dataset cleaning
+3. Corpus cleaning
+4. Creating Term-Document Matrices (TDM) and Document-Term Matrices (DTM)
+5. Identifying the most frequent terms
+6. Word associations
+7. Bigrams and trigrams
+8. General sentiment analysis and sentiment by categories
+9. Extraction of the most frequent hashtags
+10. Topic identification
+11. Tweet classification based on topics
+12. Sentiment analysis relative to topics
+
+Goals: Extracting topics, extracting relevant hashtags and keywords.
+
+
+library(tm)
+library(topicmodels)
+library(qdapTools)
+library(BTM)
+library(qdap)
+library(ggraph)
+library(textplot)
+library(concaveman)
+library(data.table)
+library(stopwords)
+library(udpipe)
+library(syuzhet)
+library(ggthemes)
+library(ggplot2)
+library(RColorBrewer)
+library(wordcloud)
+library(dplyr)
+library(tidytext)
+library(quanteda)
+library(stringr)
+library(purrr)
+
+# Importing the .csv file
+twitter <- read.csv("~/CE.csv", stringsAsFactors = FALSE)
+names(twitter)
+twitter <- unique(twitter) # Removing duplicate tweets
+
+# 75% - 25% (training - testing)
+training <- floor(0.75 * nrow(twitter))
+
+# Setting the seed for reproducibility
+set.seed(100)
+
+# Creating training and test datasets
+index <- sample(seq_len(nrow(twitter)), size = training)
+test_twitter <- twitter[-index, ]
+training_twitter <- twitter[index, ]
+options(max.print=100) # Setting max.print option
+
+# Cleaning the dataset (removing encoding errors)
+test_twitter$text <- gsub("<[^>]+>", "", test_twitter$text)
+test_twitter$text <- gsub("<[^>]+><[^>]+>", "", test_twitter$text)
+test_twitter$text <- gsub("&amp;", "", test_twitter$text)
+test_twitter$text <- gsub("&amp", "", test_twitter$text)
+test_twitter$text <- gsub("&", "", test_twitter$text)
+test_twitter$text <- gsub("amp", "", test_twitter$text)
+test_twitter$text <- gsub("amp;", "", test_twitter$text)
+test_twitter$text <- gsub("@[A-Za-z0-9]+", "", test_twitter$text)
+test_twitter$text <- gsub("wh", "", test_twitter$text)
+test_twitter$text <- gsub("@SchneiderElec", "", test_twitter$text)
+test_twitter$text <- gsub("@", "", test_twitter$text)
+test_twitter$text <- gsub("SchneiderElec", "", test_twitter$text)
+test_twitter$text <- gsub("tweet", "", test_twitter$text)
+test_twitter$text <- gsub("tweeted", "", test_twitter$text)
+test_twitter$text <- gsub("tweets", "", test_twitter$text)
+test_twitter$text <- gsub("1st", "", test_twitter$text)
+test_twitter$text <- gsub("anandmahindra", "", test_twitter$text)
+
+# Cleaning the corpus
+twitter_get <- get_sentences(test_twitter$text)
+corpus_review = Corpus(VectorSource(twitter_get)) # Creating the corpus
+corpus_review = tm_map(corpus_review, tolower) # Converting text to lowercase
+corpus_review = tm_map(corpus_review, removePunctuation) # Removing punctuation
+corpus_review = tm_map(corpus_review, removeNumbers) # Removing numbers
+stopwords("en") # English stopwords list
+corpus_review = tm_map(corpus_review, removeWords, stopwords("english")) # Removing stopwords
+my_stopwords <- c("may", "will", "also", "get", "made", "can", 
+                  "am", "just", "i", "i'm", "of", "the", "this", 
+                  "in", "know", "eriksolheim", "want", "need", 
+                  "che", "amp", "check", "just", "read", "circulareconomy", 
+                  "circ", "one", "&amp;", "&", ";", "&amp", "wh", "1st")
+corpus_review = tm_map(corpus_review, removeWords, my_stopwords) # Removing highly frequent words
+
+# Removing URLs at the end of each tweet
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
+corpus_review <- tm_map(corpus_review, removeURL)
+corpus_review <- tm_map(corpus_review, content_transformer(removeURL))
+
+# Increasing memory
+memory.size()  # Checking memory size
+memory.limit() # Checking the preset memory limit
+memory.limit(size = 56000) # Increasing memory
+
+# Creating Term-Document Matrix (TDM) and Document-Term Matrix (DTM)
+review_tdm <- TermDocumentMatrix(corpus_review, control=list(wordlength=c(1,Inf), weighting = weightTfIdf))
+review_dtm <- DocumentTermMatrix(corpus_review, control=list(wordlength=c(1,Inf), weighting = weightTfIdf))
+
+# Converting TDM to a matrix
+review_m <- as.matrix(review_tdm)
+# Summing term frequencies to get the total frequency of each word
+review_term_freq <- rowSums(review_m)
+# Sorting term frequencies in descending order
+review_term_freq <- sort(review_term_freq, decreasing = TRUE)
+# List of the top 20 most frequent terms
+review_term_freq[1:20]
+# Barplot of the top 20 most frequent terms
+barplot(review_term_freq[1:20], col = "orange", las=2)
+
+# Wordcloud with the top 20 most frequent terms
+review_word_freq <- data.frame(term = names(review_term_freq), num = review_term_freq)
+wordcloud(review_word_freq$term, review_word_freq$num, max.words = 20, random.order = FALSE, colors = c("darkgreen","steelblue1","orange"))
+review_word_freq$term
+review_word_freq$num
+
+# Wordcloud with the top 50 most frequent terms
+review_word_freq <- sort(rowSums(review_m), decreasing = TRUE)
+w_cloud <- data.frame(word = names(review_word_freq), freq = (review_word_freq))
+wordcloud2(data = w_cloud[1:50, ], size = 1, shape = circle)
+
+# Word associations
+assocs_1 = findAssocs(review_dtm, terms = "plastic", 0.1)
+assocs_1
+assocs_2 = findAssocs(review_dtm, terms = "today", 0.1)
+assocs_2
+assocs_3 = findAssocs(review_dtm, terms = "recycling", 0.1)
+assocs_3
+assocs_4 = findAssocs(review_dtm, terms = "waste", 0.1)
+assocs_4
+assocs_5 = findAssocs(review_dtm, terms = "sustainable", 0.1)
+assocs_5
+
+associations_df1 = list_vect2df(assocs_1)[, 2:3]
+ggplot(associations_df1, aes(y = associations_df1[, 1])) + geom_point(aes(x = associations_df1[, 2]), data = associations_df1, size = 2) + ggtitle("Word Associations to 'plastic'") + theme_gdocs()
+
+associations_df2 = list_vect2df(assocs_2)[, 2:3]
+ggplot(associations_df2, aes(y = associations_df2[, 1])) + geom_point(aes(x = associations_df2[, 2]), data = associations_df2, size = 2) + ggtitle("Word Associations to 'today'") + theme_gdocs()
+
+associations_df3 = list_vect2df(assocs_3)[, 2:3]
+ggplot(associations_df1, aes(y = associations_df3[, 1])) + geom_point(aes(x = associations_df3[, 2]), data = associations_df3, size = 2) + ggtitle("Word Associations to 'recycling'") + theme_gdocs()
+
+associations_df4 = list_vect2df(assocs_4)[, 2:3]
+ggplot(associations_df4, aes(y = associations_df4[, 1])) + geom_point(aes(x = associations_df4[, 2]), data = associations_df4, size = 2) + ggtitle("Word Associations to 'waste'") + theme_gdocs()
+
+associations_df5 = list_vect2df(assocs_5)[, 2:3]
+ggplot(associations_df5, aes(y = associations_df5[, 1])) + geom_point(aes(x = associations_df5[, 2]), data = associations_df5, size = 2) + ggtitle("Word Associations to 'sustainable'") + theme_gdocs()
+
+# Creating bigrams
+review_bigram = tokens(test_twitter$text) %>%
+  tokens_remove("\\p{P}", valuetype = "regex", padding = TRUE) %>%
+  tokens_remove(stopwords("english"), padding  = TRUE) %>%
+  tokens_ngrams(n = 2) %>%
+  dfm()
+topfeatures(review_bigram)
+
+# Creating trigrams
+review_trigram = tokens(test_twitter$text) %>%
+  tokens_remove("\\p{P}", valuetype = "regex", padding = TRUE) %>%
+  tokens_remove(stopwords("english"), padding  = TRUE) %>%
+  tokens_ngrams(n = 3) %>%
+  dfm()
+topfeatures(review_trigram)
+
+# General sentiment analysis using the syuzhet package
+sentiment_Syuzhet = get_sentiment(test_twitter$text)
+sum(sentiment_Syuzhet)
+sentiment_nrc = get_nrc_sentiment(test_twitter$text)
+sentiment_nrc
+colSums(sentiment_nrc)
+anger = sum(sentiment_nrc[,1])
+anger
+anticipation = sum(sentiment_nrc[,2])
+anticipation    
+disgust = sum(sentiment_nrc[,3])
+disgust
+fear = sum(sentiment_nrc[,4])
+fear
+joy = sum(sentiment_nrc[,5])
+joy
+sadness = sum(sentiment_nrc[,6])
+sadness
+surprise = sum(sentiment_nrc[,7])
+surprise
+trust = sum(sentiment_nrc[,8])
+trust
+negative = sum(sentiment_nrc[,9]) 
+negative
+positive = sum(sentiment_nrc[,10]) 
+positive
+
+# Barplot showing sentiment scores for each category in sentiment_nrc
+sentiment_nrc1 = c(anger, anticipation, disgust, fear, joy, sadness, surprise, trust, negative, positive)
+barplot(sentiment_nrc1, main = "nrc category scores", col = "grey", names.arg = c("anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust", "negative", "positive"))
+plot(sentiment_Syuzhet, main = "Sentiment Trend with Syuzhet", xlab = "documents", ylab = "sentiment score")
+
+# Plot showing the contribution of words to overall sentiment
+ap_td = tidy(review_dtm)
+ap_sentiments <- ap_td %>%
+  inner_join(get_sentiments("bing"), by = c(term = "word"))
+
+ap_sentiments %>%
+  count(sentiment, term, wt = count) %>%
+  ungroup() %>%
+  filter(n >= 60) %>%
+  mutate(n = ifelse(sentiment == "negative", -n, n)) %>%
+  mutate(term = reorder(term, n)) %>%
+  ggplot(aes(term, n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  ylab("Contribution to sentiment") +
+  coord_flip()
+
+# Topic modeling
+topic_ <- udpipe(test_twitter$text, "english", trace = 10)
+biterms <- as.data.table(topic_)
+biterms <- biterms[, cooccurrence(x = lemma,
+                                  relevant = upos %in% c("NOUN", "ADJ", "VERB") & 
+                                    nchar(lemma) > 2 & !lemma %in% stopwords("en"),
+                                  skipgram = 3),
+                   by = list(doc_id)]
+traindata <- subset(topic_, upos %in% c("NOUN", "ADJ", "VERB") & !lemma %in% stopwords("en") & nchar(lemma) > 2)
+traindata <- traindata[, c("doc_id", "lemma")]
+model <- BTM(traindata, biterms = biterms, k = 5, iter = 2000, background = TRUE, trace = 100) # Gibbs sampling
+terms(model)
+plot(model, top_n = 6, title = "")
+
+# Sentiment by topic:
+
+# Sentiment for the "circular economy" topic
+token1_1 <- grep("economy", test_twitter$text)
+token1_2 <- grep("circular", test_twitter$text)
+token1_3 <- grep("business", test_twitter$text)
+token1_4 <- grep("new", test_twitter$text) 
+token1_5 <- grep("create", test_twitter$text)
+token1 <- c(token1_1,token1_2,token1_3,token1_4,token1_5)
+unique(token1)
+senttoken1 <- get_sentiment(test_twitter$text[unique(token1)])
+senttoken1
+sum(senttoken1)
+
+# Sentiment for the "sustainability" topic
+token2_1 <- grep("make", test_twitter$text) 
+token2_2 <- grep("waste", test_twitter$text)
+token2_3 <- grep("plastic", test_twitter.text) 
+token2_4 <- grep("food", test_twitter$text) 
+token2_5 <- grep("use", test_twitter$text) 
+token2 <- c(token2_1,token2_2,token2_3,token2_4,token2_5)
+unique(token2)
+senttoken2 <- get_sentiment(test_twitter$text[unique(token2)])
+sum(senttoken2)
+
+# Sentiment for the "recycling" topic
+token3_1 <- grep("plastic", test_twitter$text) 
+token3_2 <- grep("recycle", test_twitter$text)
+token3_3 <- grep("waste", test_twitter$text) 
+token3_4 <- grep("ton", test_twitter$text) 
+token3_5 <- grep("sustainable", test_twitter$text) 
+token3 <- c(token3_1,token3_2,token3_3,token3_4,token3_5)
+unique(token3)
+senttoken3 <- get_sentiment(test_twitter$text[unique(token3)])
+sum(senttoken3)
+
+# Sentiment for the "environmental resources" topic
+token4_1 <- grep("use", test_twitter$text) 
+token4_2 <- grep("ton", test_twitter$text)
+token4_3 <- grep("resource", test_twitter$text) 
+token4_4 <- grep("natural", test_twitter$text) 
+token4_5 <- grep("avoid", test_twitter$text) 
+token4 <- c(token4_1,token4_2,token4_3,token4_4,token4_5)
+unique(token4)
+senttoken4 <- get_sentiment(test_twitter$text[unique(token4)])
+sum(senttoken4)
+
+# Sentiment for the "webinar" topic
+token5_1 <- grep("today", test_twitter$text)
+token5_2 <- grep("new", test_twitter$text)
+token5_3 <- grep("join", test_twitter$text)
+token5_4 <- grep("event", test_twitter$text)
+token5_5 <- grep("webinar", test_twitter$text)
+token5 <- c(token5_1,token5_2,token5_3,token5_4,token5_5)
+unique(token5)
+senttoken5 <- get_sentiment(test_twitter$text[unique(token5)])
+sum(senttoken5)
+
+# Classifying tweets based on identified topics
+options(max.print=100)
+test_twitter$text[unique(token1)]
+test_twitter$text[unique(token2)]
+test_twitter$text[unique(token3)]
+test_twitter$text[unique(token4)]
+test_twitter$text[unique(token5)]
+
+# Extracting hashtags
+funzione_hashtag <- str_extract_all(test_twitter$text, "(?<=^|\\s)#\\S+")
+hash <- (funzione_hashtag)
+hashtag <- unique(hash)
+funzione_hashtag
+h <- compact(hashtag) # Removing empty tweets (those without hashtags)
+
+# Most relevant hashtags
+h_singoli <- c(unlist(h)) # Putting each hashtag on a separate line
+corpus_hashtag = Corpus(VectorSource(h_singoli)) # Creating a corpus
+corpus_hashtag = tm_map(corpus_hashtag, tolower) # Converting text to lowercase (including #)
+corpus_hashtag = tm_map(corpus_hashtag, removePunctuation) # Removing punctuation
+corpus_hashtag = tm_map(corpus_hashtag, removeNumbers) # Removing numbers
+corpus_hashtag = tm_map(corpus_hashtag, removeWords, stopwords("english")) # Removing stopwords
+my_stopwords <- c("may", "will", "also", "get", "made", "can", 
+                  "am", "just", "i", "i'm", "ucu", "ucue",
+                  "of", "the", "this", "in", "know",
+                  "want", "need", "che", "amp", "check",  
+                  "read", "circ", "one", "eriksolheim", "just",
+                  "&amp;", "&", ";", "&amp", "wh", "1st", 
+                  "circulareconomy", "circular", "economy")
+corpus_hashtag = tm_map(corpus_hashtag, removeWords, my_stopwords) # Removing highly frequent words
+review_hashtag <- TermDocumentMatrix(corpus_hashtag, control=list(wordlength=c(1,Inf), weighting = weightTfIdf))
+# Converting TDM to a matrix
+matrice_hashtag <- as.matrix(review_hashtag)
+# Summing term frequencies to get the total frequency of each word
+lista_hashtag <- rowSums(matrice_hashtag)
+# Sorting term frequencies in descending order
+lista_hashtag <- sort(lista_hashtag, decreasing = TRUE)
+# List of the top 20 most frequent hashtags
+lista_hashtag[1:20]
+# Barplot of the top 20 most frequent hashtags
+barplot(lista_hashtag[1:20], col = "orange", las=2)
